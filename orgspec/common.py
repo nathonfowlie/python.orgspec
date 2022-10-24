@@ -1,17 +1,34 @@
+"""Common classes, enums and helper functions used by the orgspec framework."""
 from types import ModuleType
-from typing import List, Optional
-from dataclasses import dataclass
+from typing import Any, Callable, List, Optional
+from dataclasses import dataclass, field
 import importlib
 from enum import Enum, unique
+
+
+@unique
+class ComponentType(Enum):
+    """Types of components available to an Environment."""
+
+    COMPONENT1 = "COMPONENT1"
+    COMPONENT2 = "COMPONENT2"
+    COMPONENT3 = "COMPONENT3"
+
+
+@dataclass
+class Component:
+    name: str
+    component_type: Optional[ComponentType] = None
+    foo: Optional[str] = None
 
 
 @unique
 class EnvironmentType(Enum):
     """Environment categories."""
 
-    DEV = ("DEV",)
-    TST = ("TST",)
-    STG = ("STG",)
+    DEV = "DEV"
+    TST = "TST"
+    STG = "STG"
     PRD = "PRD"
 
 
@@ -62,7 +79,40 @@ class Environment:
     env_type: EnvironmentType
 
     """Database schema used to connect to the application backend."""
-    db_config: Optional[DBConfig] = None
+    db_config: Optional[Callable[[Any], DBConfig]] = None
+
+    """Components running in the environment."""
+    components: List[Component] = field(default_factory=list)
+
+
+@dataclass
+class Organisation:
+    """Organisation specification."""
+
+    """Organisations friendly name."""
+    name: str
+
+    """Abbreviated org name.
+    
+    Case sensitive. This is embedded into various application configurations.
+    """
+    short_name: str
+
+    """List of environments hosted by the organisation."""
+    environments: List[Environment] = field(default_factory=list)
+
+    def env(self, name: str) -> Optional[Environment]:
+        """Retrieve an environment specification.
+
+        Params:
+            name: Name of the environment to retrieve.
+
+        Returns:
+            A Environment instnace, or `None` if an environment with the given
+            name could not be found.
+        """
+        e = next((x for x in self.environments if x.name == name), None)
+        return e
 
 
 def env_based_db_config(env: Environment, db_user: str) -> DBConfig:
@@ -81,41 +131,14 @@ def env_based_db_config(env: Environment, db_user: str) -> DBConfig:
     return DBConfig(
         db_user=db_user,
         db_password=VaultSecret(
-            namespace=None,
-            path=f"atl/{env.name}",
-            keys=["ATL_DB_PASSWORD"]
+            namespace=None, path=f"atl/{env.name}", keys=["ATL_DB_PASSWORD"]
         ),
     )
 
 
-@dataclass
-class Organisation:
-    """Organisation specification."""
-
-    """Organisations friendly name."""
-    name: str
-
-    """Abbreviated org name.
-    
-    Case sensitive. This is embedded into various application configurations.
-    """
-    short_name: str
-
-    """List of environments hosted by the organisation."""
-    environments: List[Environment]
-
-    def env(self, name: str) -> Environment:
-        """Retrieve an environment specification.
-
-        Params:
-            name: Name of the environment to retrieve.
-
-        Returns:
-            A Environment instnace, or `None` if an environment with the given
-            name could not be found.
-        """
-        e = next((x for x in self.environments if x.name == name), None)
-        return e
+def env_based_foo_config(org: Organisation, env: Environment, cmp: Component) -> str:
+    """"""
+    return f"{org.name}/{env.name}"
 
 
 def load_envs(name: str) -> List[Environment]:
@@ -128,15 +151,14 @@ def load_envs(name: str) -> List[Environment]:
     Returns:
         A list of one or more Environment instances.
     """
-    mod: ModuleType = importlib.import_module(f"orgspec.environments.{name}")
-    func = getattr(mod, "envspec")
-    all = func()
+    mod_name: str = f"orgspec.environments.{name}"
+    mod: ModuleType = importlib.import_module(mod_name)
+    envspec_func = getattr(mod, "envspec")
 
     found_envs = []
-
-    for e in all:
-        if e.db_config:
-            e.db_config = e.db_config(e)
-        found_envs.append(e)
+    for env in envspec_func():
+        if env.db_config:
+            env.db_config = env.db_config(env)
+        found_envs.append(env)
 
     return found_envs

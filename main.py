@@ -1,8 +1,17 @@
-from orgspec import org1, org2
+"""Main entrypoint for the demo orgspec utility."""
+from orgspec import init_config
+from orgspec.organisations import org1, org2
 
-org1_dev = org1.env("dev")
-print("DEV environment spec for Org 1:")
-print(org1_dev)
+init_config()
 
-print("\nOrg2 spec")
+print("-" * 80)
+print("Organisation 1 Specification")
+print("-" * 80)
+print(org1)
+
+
+print("\n")
+print("-" * 80)
+print("Organisation 2 Specification")
+print("-" * 80)
 print(org2)
